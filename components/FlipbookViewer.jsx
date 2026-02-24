@@ -13,66 +13,105 @@ export default function FlipbookViewer({
   showBranding,
   onPageTurn,
 }) {
+  const viewerRef = useRef(null);
   const mountRef = useRef(null);
   const pageFlipRef = useRef(null);
   const [isLoading, setIsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
+  const [viewerError, setViewerError] = useState('');
+
+  const handleFullscreen = async () => {
+    const target = viewerRef.current;
+    if (!target || !target.isConnected || !target.requestFullscreen) return;
+
+    try {
+      await target.requestFullscreen();
+    } catch {
+      // Ignore user-agent fullscreen rejections (gesture/policy related).
+    }
+  };
 
   // Initializes page-flip after images are available and cleans up on unmount.
   useEffect(() => {
     if (!mountRef.current || !pageUrls?.length) return undefined;
 
+    let cancelled = false;
     mountRef.current.innerHTML = '';
-    const pages = pageUrls.map((url, index) => {
-      const page = document.createElement('div');
-      page.className = 'flip-page';
-
-      const image = document.createElement('img');
-      image.src = url;
-      image.alt = `${title || 'document'} page ${index + 1}`;
-      image.loading = 'lazy';
-      image.className = 'flip-page-image';
-
-      page.appendChild(image);
-      return page;
-    });
-
-    pages.forEach((page) => mountRef.current.appendChild(page));
-
-    const pageFlip = new PageFlip(mountRef.current, {
-      width: 550,
-      height: 733,
-      size: 'stretch',
-      minWidth: 280,
-      maxWidth: 1200,
-      minHeight: 360,
-      maxHeight: 1550,
-      usePortrait: true,
-      showCover: false,
-      mobileScrollSupport: true,
-      drawShadow: true,
-      flippingTime: 650,
-    });
-
-    pageFlip.loadFromHTML(pages);
-    pageFlip.on('flip', (event) => {
-      const page = (event.data || 0) + 1;
-      setCurrentPage(page);
-      if (onPageTurn) onPageTurn(page);
-    });
 
     const initTimeout = window.setTimeout(() => {
-      setIsLoading(false);
-    }, 600);
+      if (!cancelled) setIsLoading(false);
+    }, 3000);
 
-    pageFlip.on('init', () => {
-      window.clearTimeout(initTimeout);
-      setIsLoading(false);
-    });
+    const initializeViewer = async () => {
+      try {
+        const pageNodes = await Promise.all(
+          pageUrls.map((url, index) => {
+            return new Promise((resolve, reject) => {
+              const page = document.createElement('div');
+              page.className = 'flip-page';
 
-    pageFlipRef.current = pageFlip;
+              const image = document.createElement('img');
+              image.src = url;
+              image.alt = `${title || 'document'} page ${index + 1}`;
+              image.loading = 'eager';
+              image.className = 'flip-page-image';
+
+              image.onload = () => {
+                page.appendChild(image);
+                resolve(page);
+              };
+              image.onerror = () => reject(new Error(`Failed to load page image ${index + 1}`));
+            });
+          })
+        );
+
+        if (cancelled || !mountRef.current) return;
+
+        pageNodes.forEach((page) => mountRef.current.appendChild(page));
+
+        const pageFlip = new PageFlip(mountRef.current, {
+          width: 550,
+          height: 733,
+          size: 'stretch',
+          minWidth: 280,
+          maxWidth: 1200,
+          minHeight: 360,
+          maxHeight: 1550,
+          usePortrait: true,
+          showCover: false,
+          mobileScrollSupport: true,
+          drawShadow: true,
+          flippingTime: 650,
+        });
+
+        pageFlip.loadFromHTML(pageNodes);
+        pageFlip.on('flip', (event) => {
+          const page = (event.data || 0) + 1;
+          setCurrentPage(page);
+          if (onPageTurn) onPageTurn(page);
+        });
+        pageFlip.on('init', () => {
+          if (!cancelled) {
+            window.clearTimeout(initTimeout);
+            setViewerError('');
+            setIsLoading(false);
+          }
+        });
+
+        pageFlipRef.current = pageFlip;
+      } catch (err) {
+        if (!cancelled) {
+          window.clearTimeout(initTimeout);
+          setViewerError(err?.message || 'Failed to initialize flipbook viewer.');
+          setIsLoading(false);
+        }
+      }
+    };
+
+    initializeViewer();
 
     return () => {
+      cancelled = true;
       window.clearTimeout(initTimeout);
       if (pageFlipRef.current) {
         pageFlipRef.current.destroy();
@@ -83,6 +122,7 @@ export default function FlipbookViewer({
 
   return (
     <main
+      ref={viewerRef}
       style={{
         minHeight: '100vh',
         background: brandColor || '#1B4F8A',
@@ -126,13 +166,20 @@ export default function FlipbookViewer({
         />
       ) : null}
 
+      {!isLoading && viewerError ? (
+        <p style={{ textAlign: 'center', marginBottom: '1rem' }}>{viewerError}</p>
+      ) : null}
+
       <section
         ref={mountRef}
         style={{
           width: '100%',
           maxWidth: '1100px',
           margin: '0 auto',
-          minHeight: '60vh',
+          minHeight: '70vh',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
         }}
       />
 
@@ -155,18 +202,22 @@ export default function FlipbookViewer({
         <button type="button" onClick={() => pageFlipRef.current?.flipNext()}>
           Next
         </button>
-        <button type="button" onClick={() => mountRef.current?.requestFullscreen()}>
+        <button type="button" onClick={handleFullscreen}>
           Fullscreen
         </button>
       </footer>
 
       <style jsx global>{`
-        .flip-page {
+        .stf__parent {
+          margin: 0 auto;
+        }
+
+        .stf__item {
           background: #ffffff;
           overflow: hidden;
         }
 
-        .flip-page-image {
+        .stf__item img {
           width: 100%;
           height: 100%;
           object-fit: contain;

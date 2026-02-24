@@ -15,17 +15,25 @@ export default function DashboardPreviewPage() {
   const [error, setError] = useState('');
   const [documentData, setDocumentData] = useState(null);
   const [uid, setUid] = useState(null);
+  const [authResolved, setAuthResolved] = useState(false);
 
   // Tracks auth state so only the owner can preview draft documents.
   useEffect(() => {
     return onAuthStateChanged(auth, (user) => {
       setUid(user?.uid || null);
+      setAuthResolved(true);
     });
   }, []);
 
   // Loads the requested document and verifies ownership.
   useEffect(() => {
-    if (!documentId) return;
+    if (!documentId || !authResolved) return;
+
+    if (!uid) {
+      setError('Login required to preview this document.');
+      setLoading(false);
+      return;
+    }
 
     let mounted = true;
 
@@ -40,11 +48,6 @@ export default function DashboardPreviewPage() {
         }
 
         const data = snap.data();
-        if (!uid) {
-          if (mounted) setError('Login required to preview this document.');
-          return;
-        }
-
         if (data.userId !== uid) {
           if (mounted) setError('You do not have permission to preview this document.');
           return;
@@ -65,7 +68,7 @@ export default function DashboardPreviewPage() {
     return () => {
       mounted = false;
     };
-  }, [documentId, uid]);
+  }, [documentId, uid, authResolved]);
 
   if (loading) return <main>Loading preview...</main>;
   if (error) return <main>{error}</main>;
