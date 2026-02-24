@@ -1,22 +1,21 @@
 {
   "name": "functions",
   "version": "1.0.0",
-  "description": "",
+  "description": "Firebase Cloud Functions for Docsflip",
   "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
   "type": "commonjs",
+  "engines": {
+    "node": "20"
+  },
+  "scripts": {
+    "test": "echo \"No tests configured\" && exit 0"
+  },
   "dependencies": {
     "axios": "^1.13.5",
-    "canvas": "^3.2.1",
     "firebase-admin": "^13.6.1",
     "firebase-functions": "^7.0.5",
+    "google-auth-library": "^9.15.1",
     "jszip": "^3.10.1",
-    "pdfjs-dist": "^5.4.624",
     "sharp": "^0.34.5"
   }
 }
